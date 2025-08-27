@@ -1,0 +1,31 @@
+export type AnyArray<T = unknown> = ReadonlyArray<T> | T[];
+
+export type ToArray<T> = T extends AnyArray ? T : AnyArray<T>;
+
+export type ManifestSection = {
+  [key: string]: string;
+};
+
+export type ManifestEntries = {
+  [key: string]: string | ManifestSection;
+};
+
+export type GenerateManifestOptions = {
+  /** Patterns de fichiers à exclure (glob patterns ou regex), realtives to baseDir */
+  excludePatterns?: string[];
+  /** Fonction personnalisée pour filtrer les fichiers */
+  filter?: (filePath: string, isDirectory: boolean) => boolean;
+  /** Exclure automatiquement les fichiers de test */
+  excludeTests?: boolean;
+  /** Répertoire de base pour le scan (par défaut: SRC_DIR) */
+  baseDir?: string;
+  /** Afficher les logs détaillés */
+  extensions?: string[];
+  verbose?: boolean;
+  asConst?: boolean;
+};
+
+export type WatcherOptions = GenerateManifestOptions & {
+  /** Dossier à surveiller (par défaut: SRC_DIR) */
+  watch?: boolean;
+};
