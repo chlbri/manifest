@@ -25,7 +25,6 @@ export const cli = command({
       description:
         'Patterns de fichiers à exclure (peut être utilisé plusieurs fois)',
       type: array(string),
-      // defaultValue: () => [],
     }),
     extensions: multioption({
       long: 'extensions',
@@ -33,20 +32,17 @@ export const cli = command({
       description:
         'Extensions de fichiers à inclure (peut être utilisé plusieurs fois)',
       type: array(string),
-      // defaultValue: () => [],
       defaultValueIsSerializable: true,
     }),
     excludeTests: flag({
       long: 'exclude-tests',
       description: 'Exclure automatiquement les fichiers de test',
-      defaultValue: () => false,
       env: 'EXCLUDE_TESTS',
     }),
     verbose: flag({
       long: 'verbose',
       short: 'v',
       description: 'Afficher les logs détaillés',
-      defaultValue: () => false,
     }),
     asConst: flag({
       long: 'const',

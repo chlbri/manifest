@@ -1,30 +1,80 @@
-# Beatifull lib
+## Description
 
-A beautifull description
+This library provides helpers and tools to simplify the management of
+manifests in Node.js projects.
+
+## Usage
+
+Installation:
+
+```bash
+pnpm add @bemedev/manifest
+```
+
+Example usage:
+
+### Code
+
+```ts
+import { buildWatcher } from '@bemedev/manifest';
+
+// Using the watcher
+const watcher = buildWatcher({ path: './manifest.json' });
+watcher.on('change', () => {
+  console.log('Manifest changed!');
+});
+```
+
+### CLI
+
+To use the CLI, add to your package.json, eventually after installing
+@bemedev/manifest as dependency:
+
+```json
+{
+  "scripts": {
+    "manifest": "manifest"
+  }
+}
+```
+
+Or run directly:
+
+```bash
+pnpx @bemedev/manifest [options]
+```
+
+Or, if you have the package installed:
+
+```bash
+pnpm manifest [options]
+```
+
+#### Available options
+
+| Option             | Alias | Description                                             |
+| ------------------ | ----- | ------------------------------------------------------- |
+| --watch            | -w    | Enable directory watching (watch mode)                  |
+| --base-dir <dir>   | -b    | Base directory to scan (default: src)                   |
+| --exclude <pat>    | -e    | File patterns to exclude (can be used multiple times)   |
+| --extensions <ext> | -x    | File extensions to include (can be used multiple times) |
+| --exclude-tests    |       | Automatically exclude test files                        |
+| --verbose          | -v    | Show detailed logs                                      |
+| --const            | -c    | Append "as const" to the end of the generated manifest  |
+
+#### Example
+
+```bash
+pnpx @bemedev/manifest --base-dir src --exclude "*.test.ts" --extensions .ts,.json --verbose
+```
 
 <br/>
 
-## Licence
-
-MIT
-
-## CHANGE_LOG
-
-<details>
-
-<summary>
-...
-</summary>
-
-### Version [0.0.1] --> _date & hour_
-
-- ✨ Première version de la bibliothèque
-
-</details>
+## [CHANGE_LOG](./CHANGE_LOG.md)
 
 <br/>
 
-## Auteur
+## Author
 
 chlbri (bri_lvi@icloud.com)
 
@@ -34,6 +84,12 @@ chlbri (bri_lvi@icloud.com)
 
 <br/>
 
-## Liens
+## Links
 
-- [Documentation](https://github.com/chlbri/new-package)
+- Documentation: https://github.com/chlbri/manifest.git
+
+<br/>
+
+## License
+
+MIT

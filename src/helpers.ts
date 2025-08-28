@@ -1,22 +1,9 @@
-import { watch } from 'chokidar';
+import { watch, type FSWatcher } from 'chokidar';
 import { readdir, writeFile } from 'fs/promises';
 import { globSync } from 'node:fs';
+import { extname } from 'node:path';
 import { join, relative } from 'path';
-import type {
-  GenerateManifestOptions,
-  ManifestEntries,
-  ManifestSection,
-  ToArray,
-  WatcherOptions,
-} from './types';
-
-export const toArray = <T>(value?: T) => {
-  if (!value) return [];
-  const checkArray = Array.isArray(value);
-  const out = checkArray ? value : [value];
-
-  return out as ToArray<T>;
-};
+import type { GenerateManifestOptions, WatcherOptions } from './types';
 
 // Configuration
 export const SRC_DIR = join(process.cwd(), 'src');
@@ -31,7 +18,11 @@ export const BASE_PATH = 'src';
  */
 function pathToKey(filePath: string): string {
   // Retirer l'extension .ts
-  const withoutExt = filePath.replace(/\.ts$/, '');
+  const ext = extname(filePath);
+  let withoutExt = '';
+  if (ext === '.ts') {
+    withoutExt = filePath.replace(/\.ts$/, '');
+  } else withoutExt = filePath.replace(ext, `:${ext.slice(1)}`);
 
   // Remplacer les slashes par des points
   let key = withoutExt.replace(/\//g, '.');
@@ -54,7 +45,7 @@ function shouldExcludeFile(
   filePath: string,
   options: GenerateManifestOptions,
 ): boolean {
-  const { excludePatterns = [], filter, excludeTests = true } = options;
+  const { excludePatterns = [], excludeTests = true } = options;
 
   // Exclure automatiquement le manifest lui-même
   if (filePath.includes(MANIFEST_NAME)) return true;
@@ -80,13 +71,51 @@ function shouldExcludeFile(
     }
   }
 
-  // Utiliser le filtre personnalisé si fourni
-  if (filter && !filter(filePath, false)) {
-    return true;
-  }
-
   return false;
 }
+
+const withRegions = (baseDir: string, ...entries: [string, string][]) => {
+  const regions = entries.filter(([, value]) =>
+    value.replace(`${baseDir}/`, '').includes('/'),
+  );
+
+  const noRegions = entries.filter(
+    ([, value]) => !value.replace(`${baseDir}/`, '').includes('/'),
+  );
+
+  let code = noRegions.reduce((acc, [key, value]) => {
+    const formattedKey =
+      key.includes('.') || key.includes('-') || key.includes(':')
+        ? `'${key}'`
+        : key;
+    acc += `  ${formattedKey}: '${value}',\n`;
+    return acc;
+  }, '');
+
+  if (regions.length > 0) {
+    const all = regions.reduce(
+      (acc, [key, value]) => {
+        const _key = value.replace(`${baseDir}/`, '').split('/')[0];
+        if (!acc[_key]) acc[_key] = [];
+        acc[_key].push([key, value] as const);
+        return acc;
+      },
+      {} as Record<string, [string, string][]>,
+    );
+
+    const entries2 = Object.entries(all);
+    const isLastIndex = (index: number) => index === entries2.length - 1;
+    code += '\n';
+    entries2.forEach(([regionName, entries3], index) => {
+      code += `  // #region ${regionName}\n`;
+      code += withRegions(`${baseDir}/${regionName}`, ...entries3);
+      code += `  // #endregion\n`;
+      if (!isLastIndex(index)) code += '\n';
+    });
+  }
+
+  return code;
+};
 
 /**
  * Génère les régions basées sur les dossiers principaux
@@ -94,51 +123,22 @@ function shouldExcludeFile(
  * @returns Code TypeScript du manifest avec régions
  */
 function generateManifestWithRegions(
-  manifestEntries: ManifestEntries,
+  manifestEntries: Record<string, string>,
+  baseDir: string,
   asConst = false,
 ): string {
   let code = 'export const MANIFEST = {\n';
 
-  // Ajouter l'entrée index en premier
-  if (manifestEntries.index) {
-    code += `  index: '${manifestEntries.index}',\n\n`;
-    delete manifestEntries.index;
-  }
-
-  // Trier les clés par ordre alphabétique des sections principales
-  const sections = Object.keys(manifestEntries)
-    .filter(section => section !== 'index')
-    .sort();
-
-  sections.forEach((section, index) => {
-    const entries = manifestEntries[section] as ManifestSection;
-
-    // Ignorer les sections vides
-    if (!entries || Object.keys(entries).length === 0) {
-      return;
+  const sorted = Object.entries(manifestEntries).sort(([a], [b]) => {
+    const splitA = a.split('.');
+    const splitB = b.split('.');
+    if (splitA.length !== splitB.length) {
+      return splitA.length - splitB.length;
     }
-
-    const sectionName = section.charAt(0).toUpperCase() + section.slice(1);
-
-    code += `  // #region ${sectionName}\n`;
-
-    // Trier les entrées dans chaque section
-    const sortedKeys = Object.keys(entries).sort();
-
-    sortedKeys.forEach(key => {
-      const value = entries[key];
-      const formattedKey =
-        key.includes('.') || key.includes('-') ? `'${key}'` : key;
-      code += `  ${formattedKey}: '${value}',\n`;
-    });
-
-    code += '  // #endregion\n';
-
-    // Ajouter une ligne vide entre les sections sauf pour la dernière
-    if (index < sections.length - 1) {
-      code += '\n';
-    }
+    return a.localeCompare(b);
   });
+
+  code += withRegions(baseDir, ...sorted);
 
   code += `}${asConst ? ' as const;' : ';'}\n`;
   return code;
@@ -160,7 +160,10 @@ export async function generateManifest(
 
     const extensions = ['.ts', ...(options.extensions || [])];
 
+    console.log('extensions:', extensions);
+
     if (verbose) {
+      console.log('Add extensions with option "--extensions"/"-x":');
       console.log('🔍 Scan des fichiers...');
       console.log(
         `📂 Répertoire de base: ${relative(process.cwd(), baseDir)}`,
@@ -172,7 +175,7 @@ export async function generateManifest(
       }
     }
 
-    const manifestEntries: ManifestEntries = {};
+    const manifestEntries: Record<string, string> = {};
     let excludedCount = 0;
     let includedCount = 0;
 
@@ -192,14 +195,6 @@ export async function generateManifest(
           : entry.name;
 
         if (entry.isDirectory()) {
-          // Vérifier si le répertoire doit être exclu
-          if (options.filter && !options.filter(relativeFilePath, true)) {
-            if (verbose) {
-              console.log(`🚫 Répertoire exclu: ${relativeFilePath}`);
-            }
-            excludedCount++;
-            continue;
-          }
           // Récursion dans les sous-répertoires
           await scanDirectory(fullPath, relativeFilePath);
         }
@@ -219,19 +214,10 @@ export async function generateManifest(
 
           // Traiter les fichiers TypeScript inclus
           const key = pathToKey(relativeFilePath);
-          const value = `${BASE_PATH}/${relativeFilePath}`;
+          const value = `${baseDir}/${relativeFilePath}`;
 
           // Grouper par section principale (premier segment de la clé)
-          const mainSection = key.split('.')[0];
-
-          if (mainSection === 'index') {
-            manifestEntries.index = value;
-          } else {
-            if (!manifestEntries[mainSection]) {
-              manifestEntries[mainSection] = {};
-            }
-            (manifestEntries[mainSection] as ManifestSection)[key] = value;
-          }
+          manifestEntries[key] = value;
 
           includedCount++;
           if (verbose) {
@@ -246,6 +232,7 @@ export async function generateManifest(
     // Générer le code TypeScript
     const manifestCode = generateManifestWithRegions(
       manifestEntries,
+      baseDir,
       options.asConst,
     );
 
@@ -267,44 +254,12 @@ export async function generateManifest(
 
     console.log('✅ Manifest généré avec succès !');
     consoleStars();
+    /* v8 ignore next 4 => Added for safety */
   } catch (error) {
     console.error('❌ Erreur lors de la génération du manifest:', error);
     process.exit(1);
   }
 }
-
-/**
- * Fonction de debounce pour éviter les regénérations trop fréquentes
- */
-export const debounce = <T extends (...args: any[]) => any>(
-  func: T,
-  wait: number,
-): ((...args: Parameters<T>) => void) => {
-  let timeout: NodeJS.Timeout | undefined;
-  return function executedFunction(...args: Parameters<T>) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
-};
-
-export const initialConsole = (persistent: boolean, verbose = true) => {
-  if (persistent) {
-    consoleStars();
-    console.log(
-      '📝 Le manifest sera automatiquement mis à jour lors des changements',
-    );
-    console.log('👀 Surveillance active sur le dossier src/');
-    if (verbose) {
-      console.log('⏹️  Appuyez sur Ctrl+C pour arrêter la surveillance');
-    }
-  }
-
-  consoleStars();
-};
 
 export const consoleStars = () => {
   console.log();
@@ -312,9 +267,17 @@ export const consoleStars = () => {
   console.log();
 };
 
-export const buildWatcher = (
-  options: WatcherOptions = { watch: false },
-) => {
+export function buildWatcher(
+  options?: WatcherOptions & { watch: true },
+): FSWatcher;
+export function buildWatcher(
+  options?: WatcherOptions & { watch: false },
+): Promise<void>;
+export function buildWatcher(
+  options?: WatcherOptions,
+): Promise<void> | FSWatcher;
+
+export function buildWatcher(options: WatcherOptions = { watch: false }) {
   consoleStars();
   console.log('🚀 Génération initiale du manifest...');
 
@@ -322,7 +285,7 @@ export const buildWatcher = (
 
   const ignored = [
     ...[
-      ...toArray(options.excludePatterns),
+      ...(options.excludePatterns ?? []),
       '**/*.test.ts', // Ignorer les fichiers de test
       '**/*.spec.ts', // Ignorer les fichiers de spec
     ]
@@ -334,10 +297,7 @@ export const buildWatcher = (
     relative(process.cwd(), MANIFEST_FILE), // Ignorer le fichier manifest lui-même
   ];
 
-  if (!persistent) {
-    initialConsole(persistent, options.verbose);
-    return generateManifest(options);
-  }
+  if (!persistent) return generateManifest(options);
 
   const src = options.baseDir || SRC_DIR;
 
@@ -380,15 +340,23 @@ export const buildWatcher = (
       return generateManifest({ ...options, verbose: false });
     })
     .on('error', (error: unknown) => {
+      /* v8 ignore next 1 */
       console.error('❌ Erreur de surveillance:', error);
     })
     .on('ready', () => {
-      initialConsole(persistent, options.verbose);
-
+      consoleStars();
+      console.log(
+        '📝 Le manifest sera automatiquement mis à jour lors des changements',
+      );
+      console.log('👀 Surveillance active sur le dossier src/');
+      if (options.verbose) {
+        console.log('⏹️  Appuyez sur Ctrl+C pour arrêter la surveillance');
+      }
       return generateManifest(options);
     });
 
-  // Gestion propre de l'arrêt
+  // #region Gestion propre de l'arrêt
+  /* v8 ignore next 5 => Added for safety */
   process.on('SIGINT', async () => {
     console.log('\n🛑 Arrêt de la surveillance...');
     await watcher.close();
@@ -396,10 +364,12 @@ export const buildWatcher = (
     process.exit(0);
   });
 
+  /* v8 ignore next 3 => Added for safety */
   process.on('SIGTERM', async () => {
     await watcher.close();
     process.exit(0);
   });
+  // #endregion
 
   return watcher;
-};
+}

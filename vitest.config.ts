@@ -6,7 +6,7 @@ import tsconfig from './tsconfig.json';
 export default defineConfig({
   plugins: [
     aliasTs(tsconfig as any),
-    exclude({ ignoreCoverageFiles: ['**/index.ts'] }),
+    exclude({ ignoreCoverageFiles: ['**/index.ts', 'src/types.ts'] }),
   ],
   test: {
     bail: 10,
@@ -14,6 +14,7 @@ export default defineConfig({
     passWithNoTests: true,
     slowTestThreshold: 3000,
     globals: true,
+    fileParallelism: false,
     logHeapUsage: true,
     coverage: {
       enabled: true,

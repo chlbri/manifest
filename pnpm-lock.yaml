@@ -81,6 +81,9 @@ importers:
       size-limit:
         specifier: ^11.2.0
         version: 11.2.0
+      this:
+        specifier: file:.
+        version: '@bemedev/manifest@file:'
       tslib:
         specifier: ^2.8.1
         version: 2.8.1
@@ -123,6 +126,11 @@ packages:
 
   '@bemedev/fsf@0.8.0':
     resolution: {integrity: sha512-9/QvQvO/C6kerBzJocwTQxq3KYiwRLJqg+eGb6DK40O7VxNqSOZJAF6f4lJiZ4dPz893OJRh/4bNEMtqwMGJ+g==}
+
+  '@bemedev/manifest@file:':
+    resolution: {directory: '', type: directory}
+    engines: {node: '>=20'}
+    hasBin: true
 
   '@bemedev/rollup-config@0.1.1':
     resolution: {integrity: sha512-Bc6zILHZjUMTw0e8rSLjZU4wH8+H2SkO6bSI3J+0vsIbrA6JfylyOBH9VfnfxrwSWS6cxkBh0ZiLI+DAUC/xNg==}
@@ -1627,6 +1635,13 @@ snapshots:
     dependencies:
       '@bemedev/x-guard': 0.2.0
       deepmerge: 4.3.1
+
+  '@bemedev/manifest@file:':
+    dependencies:
+      chokidar: 4.0.3
+      cmd-ts: 0.14.1
+    transitivePeerDependencies:
+      - supports-color
 
   '@bemedev/rollup-config@0.1.1(glob@11.0.3)(rollup@4.45.1)(typescript@5.8.3)':
     dependencies:
